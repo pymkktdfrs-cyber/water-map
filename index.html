@@ -12,7 +12,7 @@
 </head>
 <body>
 <main class="page">
-<section class="hero"><div><h1>区县级水质方案推荐地图</h1><p>全国 → 省份 → 城市 → 区县，查看全国各区域推荐水处理解决方案。</p><div class="note">GH=总硬度；KH=总碱度。一级读取省级 GeoJSON，二级优先读取市级 GeoJSON。</div></div><div class="pill">BRITA Professional</div></section>
+<section class="hero"><div><h1>区县级水质方案推荐地图</h1><p>全国 → 省份 → 城市 → 区县，查看全国各区域推荐水处理解决方案。</p><div class="note">GH=总硬度；KH=总碱度。点击地图查看各区域推荐方案。</div></div><div class="pill">BRITA Professional</div></section>
 <section class="stats"><div class="stat"><div class="k">区县/城市区域数</div><div class="v" id="total">-</div></div><div class="stat"><div class="k">XtraSafe大胖紫主推</div><div class="v" id="xtra">-</div></div><div class="stat"><div class="k">Quell ST风味大师主推</div><div class="v" id="st">-</div></div><div class="stat"><div class="k">Quell ST+Minup主推</div><div class="v" id="minup">-</div></div><div class="stat"><div class="k">边界双方案</div><div class="v" id="border">-</div></div></section>
 <section class="main"><div class="card"><div class="toolbar"><button class="back" id="backBtn" disabled>返回上一级</button><button class="back" id="homeBtn">返回全国</button><select id="province"><option value="全部">全部省份</option></select><select id="city"><option value="全部">全部城市</option></select><select id="plan"><option value="全部">全部主推方案</option><option value="XtraSafe大胖紫">XtraSafe大胖紫主推</option><option value="Quell ST风味大师">Quell ST风味大师主推</option><option value="Quell ST+Minup">Quell ST+Minup主推</option></select></div><div class="crumb" id="crumb">当前层级：<b>全国</b></div><div id="map"></div><div class="legend"><span><span class="dot" style="background:#B79AEF"></span>XtraSafe大胖紫主推</span><span><span class="dot" style="background:#11B5C9"></span>Quell ST风味大师主推</span><span><span class="dot" style="background:#FFF200"></span>Quell ST+Minup主推</span></div><div class="table-panel"><div class="table-title" id="tableTitle">区县明细表</div><div class="table-wrap"><table><thead><tr><th>省份</th><th>城市</th><th>区/县</th><th>TDS</th><th>GH</th><th>KH</th><th>主推</th><th>备选</th><th>类型</th></tr></thead><tbody id="districtRows"></tbody></table></div></div></div><aside class="card side"><div class="side-h"><h2 id="panelTitle">全国概览</h2><p id="panelSub">点击省份进入二级，普通城市可继续进入区县级地图。</p></div><div class="recommend" id="recommend"></div><div class="rules"><h3>规则说明</h3><div class="rule"><b style="color:#7b57cc">XtraSafe大胖紫主推</b><br>适用于过硬水：TDS&gt;200；GH&gt;175；KH&gt;70</div><div class="rule"><b style="color:#0099b0">Quell ST风味大师主推</b><br>适用于偏硬水：60≤TDS≤200；GH&gt;110；KH&gt;70</div><div class="rule"><b style="color:#a89500">Quell ST+Minup主推</b><br>适用于偏软水：TDS&lt;60；GH&lt;50；KH&lt;40</div><div class="rule"><b>数据处理</b><br>只保留到区/县/县级市；同一区县多条数据取平均。</div><div class="small">支持全国、省份、城市、区县多级查看，便于快速定位区域水质方案。</div></div></aside></section>
 </main>
@@ -41,19 +41,22 @@ function filterGeoByProvince(geo,provinceCode,records){const prefix=String(provi
 function filterGeoByCity(geo,cityCode,records){const prefix=String(cityCode||'').slice(0,4);const districtNames=new Set(records.map(x=>sn(x.district)).filter(Boolean));let fs=(geo.features||[]).filter(f=>{const code=fcode(f),name=sn(fname(f)),level=f.properties?.level;const byCode=code&&prefix&&code.startsWith(prefix)&&code!==cityCode&&(String(level)==='district'||String(level)==='3'||!code.endsWith('00'));const byName=districtNames.has(name);return byCode||byName});return {type:'FeatureCollection',features:fs}}
 async function geo(k,code,records=[]){
   if(k==='china'){
-    return firstOk(['./省级.geojson','./中华人民共和国.geojson','./china.json','./maps/china.json',`${DATAV}100000_full.json`]);
+    try{return await tf(`${DATAV}100000_full.json`)}catch(e){}
+    return firstOk(['./省级.geojson','./china.json']);
   }
   if(k==='province'){
-    try{return await tf(`./maps/province/${code}_full.json`)}catch(e){}
-    try{const allCity=await firstOk(['./市级.geojson','./maps/city.geojson','./maps/市级.geojson']);const filtered=filterGeoByProvince(allCity,code,records);if(filtered.features.length)return filtered}catch(e){}
     if(!code)throw Error('缺少省级行政区划代码，无法加载省级地图');
-    return tf(`${DATAV}${code}_full.json`)
+    try{return await tf(`${DATAV}${code}_full.json`)}catch(e){}
+    const allCity=await firstOk(['./市级.geojson','./maps/市级.geojson','./maps/city.geojson']);
+    const filtered=filterGeoByProvince(allCity,code,records);
+    if(filtered.features.length)return filtered;
+    throw Error('市级.geojson中没有匹配到当前省份的城市边界');
   }
   if(k==='city'){
-    try{return await tf(`./maps/city/${code}_full.json`)}catch(e){}
-    try{const allDistrict=await firstOk(['./区县级.geojson','./县级.geojson','./maps/district.geojson','./maps/区县级.geojson']);const filtered=filterGeoByCity(allDistrict,code,records);if(filtered.features.length)return filtered}catch(e){}
     if(!code)throw Error('缺少市级行政区划代码，无法加载区县地图');
-    return tf(`${DATAV}${code}_full.json`)
+    try{return await tf(`${DATAV}${code}_full.json`)}catch(e){}
+    try{const allDistrict=await firstOk(['./区县级.geojson','./县级.geojson','./maps/区县级.geojson','./maps/district.geojson']);const filtered=filterGeoByCity(allDistrict,code,records);if(filtered.features.length)return filtered}catch(e){}
+    throw Error('区县地图加载失败');
   }
 }
 function ad(name){const f=features.find(x=>same(x.properties?.name,name)||same(x.properties?.fullname,name));return fcode(f)}
